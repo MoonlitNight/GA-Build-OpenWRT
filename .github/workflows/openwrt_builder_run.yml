@@ -116,6 +116,7 @@ jobs:
         cp -r ./luci-app-mosdns ./openwrt/package
         cp -r ./OpenClash ./openwrt/package
         
+        cd openwrt
         # 更新feeds
         ./scripts/feeds update -a
         ./scripts/feeds install -a
