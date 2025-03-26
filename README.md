@@ -8,7 +8,6 @@ This repository provides a complete workflow to:
 - Automatically build OpenWRT firmware images
 - Fetch the latest releases of specified repositories
 - Convert images to qcow2 format for virtual machine usage
-- Allow customization through config files
 
 ## Project Structure
 ```
