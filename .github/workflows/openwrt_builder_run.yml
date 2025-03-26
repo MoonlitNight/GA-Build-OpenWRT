@@ -130,7 +130,8 @@ jobs:
           openwrt/build_dir
           openwrt/staging_dir
           ${{ env.CCACHE_DIR }}
-        key: ${{ runner.os }}-${{ matrix.device }}-${{ hashFiles('openwrt/feeds.conf.default', 'openwrt/.config') }}}
+        # key: ${{ runner.os }}-${{ matrix.device }}-${{ hashFiles('openwrt/feeds.conf.default', 'openwrt/.config') }}}
+        key: ${{ runner.os }}-${{ matrix.device }}
 
       # 步骤5：编译固件
     - name: Build image
