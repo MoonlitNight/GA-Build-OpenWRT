@@ -6,7 +6,7 @@ inputs:
     required: true
 outputs:
   latest_tags:
-    description: 'A JSON string mapping each repository to its latest tag (e.g. {"REPO1": "v1.2.3", ...})'
+    description: 'A JSON string mapping each repository to its latest tag (e.g. {"OWNER1/REPO1": "v1.2.3", ...})'
     value: ${{ steps.get_tags.outputs.latest_tags }}
 runs:
   using: "composite"
