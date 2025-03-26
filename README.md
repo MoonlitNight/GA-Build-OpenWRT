@@ -89,7 +89,3 @@ Before your first build, you must configure the workflow permissions:
 ## License
 
 [MIT License](LICENSE)
-
-## Support
-
-For issues or feature requests, please open an issue in this repository.
