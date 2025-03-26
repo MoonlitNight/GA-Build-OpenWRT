@@ -66,6 +66,14 @@ This repository provides a complete workflow to:
     - Subsequent builds will use cached components for faster execution
     - Results can be downloaded from the GitHub Actions artifacts section
 
+### Important Setup Note:
+Before your first build, you must configure the workflow permissions:
+1. Go to your repository **Settings** → **Actions** → **General**
+2. Under **Workflow permissions**, select:
+   - **Read and write permissions**
+3. This allows the workflow to:
+   - Automatically create releases when builds succeed
+   - Upload build artifacts
 ## Customization
 
 - Add your own packages by modifying the configuration
