@@ -35,15 +35,15 @@ This repository provides a complete workflow to:
     - Subsequent builds are significantly faster by reusing cached components
     - Cache is automatically invalidated when configuration changes
 
-3**Latest Release Fetcher**:
+3. **Latest Release Fetcher**:
     - Action located at `.github/actions/get-latest-tags/action.yml`
     - Automatically retrieves the latest release versions from specified repositories
 
-4**Image Conversion**:
+4. **Image Conversion**:
     - `img2qcow.sh` converts compressed OpenWRT images (.img.gz) to qcow2 format
     - Ideal for virtualization platforms like QEMU/KVM
 
-5**Configuration**:
+5. **Configuration**:
     - Uses standard OpenWRT `.config` files
     - Generate your configuration with [make menuconfig](https://openwrt.org/docs/guide-developer/toolchain/use-buildsystem)
     - Commit your config file to customize your build
