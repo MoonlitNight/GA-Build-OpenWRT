@@ -1,0 +1,62 @@
+name: 'Get Latest Tags'
+description: 'Get the latest tag for each repository provided in the repository array (sorted by commit time).'
+inputs:
+  repositories:
+    description: 'A JSON string array of repositories, e.g. ["OWNER1/REPO1", "OWNER2/REPO2"]'
+    required: true
+outputs:
+  latest_tags:
+    description: 'A JSON string mapping each repository to its latest tag (e.g. {"REPO1": "v1.2.3", ...})'
+    value: ${{ steps.get_tags.outputs.latest_tags }}
+runs:
+  using: "composite"
+  steps:
+    - name: Get Latest Tags
+      id: get_tags
+      uses: actions/github-script@v7
+      with:
+        script: |
+          try {
+            // Parse the input JSON string into an array
+            const repoArray = JSON.parse('${{ inputs.repositories }}');
+            core.info(`Processing ${repoArray.length} repositories`);
+            const results = {};
+            for (const repoFull of repoArray) {
+              core.info(`Processing repository: ${repoFull}`);
+              const [owner, repo] = repoFull.split('/');
+              core.info(`Repository info - Owner: ${owner}, Repo: ${repo}`);
+          
+              // List all tags for the repository
+              const { data: tags } = await github.rest.repos.listTags({ owner, repo });
+              core.info(`Repository ${repoFull} has ${tags.length} tags`);
+              if (tags.length === 0) {
+                throw new Error(`No tags found for repository ${repoFull}`);
+              }
+          
+              // Get commit details for each tag to retrieve the commit time
+              const tagInfos = await Promise.all(tags.map(async tag => {
+                core.info(`Processing tag: ${tag.name} for repository ${repoFull}`);
+                const { data: commitData } = await github.rest.repos.getCommit({
+                  owner,
+                  repo,
+                  ref: tag.commit.sha
+                });
+                core.info(`Commit time for tag ${tag.name} in repository ${repoFull}: ${commitData.commit.committer.date}`);
+                return {
+                  name: tag.name,
+                  date: new Date(commitData.commit.committer.date)
+                };
+              }));
+          
+              // Sort the tags in descending order by commit time (latest first)
+              tagInfos.sort((a, b) => b.date - a.date);
+              results[repoFull] = tagInfos[0].name;
+              core.info(`Latest tag for repository ${repoFull}: ${tagInfos[0].name}`);
+            }
+            // Output the result as a JSON string
+            core.setOutput('latest_tags', JSON.stringify(results));
+            core.info(`Output latest_tags is ${JSON.stringify(results)}`);
+          } catch (error) {
+            core.error(`Error while retrieving latest tags: ${error.message}`);
+            core.setFailed(`Error while retrieving latest tags: ${error.message}`);
+          }

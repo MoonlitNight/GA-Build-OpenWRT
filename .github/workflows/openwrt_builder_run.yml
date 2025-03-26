@@ -1,0 +1,188 @@
+name: OpenWRT Builder
+
+on:
+  workflow_dispatch:    # 手动触发
+    inputs:
+       isIncludePackages:
+        description: 'Whether to compile MosDns, OpenClash, adguardhome, and Argon'
+        required: true
+        default: true
+        type: boolean
+
+env:
+  CCACHE_DIR: ${{ github.workspace }}/openwrt/ccache
+
+jobs:
+  build-openwrt:
+    runs-on: ubuntu-latest
+    timeout-minutes: 480  # 超时8小时
+    strategy:
+      matrix:
+        device: [ 'x86-64' ]
+
+    steps:
+    # 步骤1：准备构建环境
+    - name: Checkout source
+      uses: actions/checkout@v4
+      with:
+        path: 'repo'
+
+    - name: Get Latest Tags
+      id: getLatestTags
+      uses: ./repo/.github/actions/get-latest-tags
+      with:
+        repositories: ${{ inputs.isIncludePackages && '["openwrt/openwrt", "jerrykuku/luci-theme-argon", "kongfl888/luci-app-adguardhome", "sbwml/luci-app-mosdns", "vernesong/OpenClash"]' || '["openwrt/openwrt"]' }}
+        
+    - name: Checkout OpenWRT
+      uses: actions/checkout@v4
+      with:
+        repository: 'openwrt/openwrt'
+        ref: ${{ steps.getLatestTags.outputs.latest_tags && fromJson(steps.getLatestTags.outputs.latest_tags)['openwrt/openwrt'] }}
+        path: 'openwrt'
+
+    - name: Checkout Theme Argon
+      uses: actions/checkout@v4
+      if: ${{ inputs.isIncludePackages }}
+      with:
+        repository: 'jerrykuku/luci-theme-argon'
+        ref: ${{ steps.getLatestTags.outputs.latest_tags && fromJson(steps.getLatestTags.outputs.latest_tags)['jerrykuku/luci-theme-argon'] }}
+        path: 'luci-theme-argon'
+
+    - name: Checkout Luci Adguardhome
+      uses: actions/checkout@v4
+      if: ${{ inputs.isIncludePackages }}
+      with:
+        repository: 'kongfl888/luci-app-adguardhome'
+        ref: ${{ steps.getLatestTags.outputs.latest_tags && fromJson(steps.getLatestTags.outputs.latest_tags)['kongfl888/luci-app-adguardhome'] }}
+        path: 'luci-app-adguardhome'
+
+    - name: Checkout Luci Mosdns
+      uses: actions/checkout@v4
+      if: ${{ inputs.isIncludePackages }}
+      with:
+        repository: 'sbwml/luci-app-mosdns'
+        ref: ${{ steps.getLatestTags.outputs.latest_tags && fromJson(steps.getLatestTags.outputs.latest_tags)['sbwml/luci-app-mosdns'] }}
+        path: 'luci-app-mosdns'
+
+    - name: Checkout OpenClash
+      uses: actions/checkout@v4
+      if: ${{ inputs.isIncludePackages }}
+      with:
+        repository: 'vernesong/OpenClash'
+        ref: ${{ steps.getLatestTags.outputs.latest_tags && fromJson(steps.getLatestTags.outputs.latest_tags)['vernesong/OpenClash'] }}
+        path: 'OpenClash'
+
+    # 步骤2：安装编译依赖
+    - name: Install dependencies
+      run: |
+        sudo apt update
+        sudo apt install build-essential clang flex bison g++ gawk \
+        gcc-multilib g++-multilib gettext git libncurses5-dev libssl-dev \
+        python3-setuptools rsync swig unzip zlib1g-dev file wget
+        sudo apt install qemu-utils -y
+
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap-storage: true
+
+
+    # 步骤4：配置设备参数
+    - name: Setup build config
+      if: ${{ !inputs.isIncludePackages }}
+      run: |
+        # 调整 root size原始版本
+        cp  ./repo/openwrt_x86_64.config ./openwrt/.config
+        cd openwrt
+        # 更新feeds
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+     # 步骤4：配置设备参数
+    - name: Setup build config (Include Packages)
+      if: ${{ inputs.isIncludePackages }}
+      run: |
+        # 调整 root size & 增加软件包版本
+        cp  ./repo/openwrt_x86_64_packages.config ./openwrt/.config
+
+        cp -r ./luci-theme-argon ./openwrt/package
+        cp -r ./luci-app-adguardhome ./openwrt/package
+        cp -r ./luci-app-mosdns ./openwrt/package
+        cp -r ./OpenClash ./openwrt/package
+        
+        # 更新feeds
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        ls -alh ./package
+
+    - name: Cache dependencies
+      uses: actions/cache@v4
+      with:
+        path: |
+          openwrt/dl
+          openwrt/build_dir
+          openwrt/staging_dir
+          ${{ env.CCACHE_DIR }}
+        key: ${{ runner.os }}-${{ matrix.device }}-${{ hashFiles('openwrt/feeds.conf.default', 'openwrt/.config') }}}
+
+      # 步骤5：编译固件
+    - name: Build image
+      run: |
+        cd openwrt
+        export CCACHE_DIR=${{ env.CCACHE_DIR }}
+        export CCACHE_MAXSIZE=2G
+        make -j$(($(nproc) + 1)) CCACHE=1 BUILD_LOG=1 V=s defconfig download clean world
+
+    # 步骤6：打包成品
+    - name: Package artifacts
+      run: |
+        BUILD_TIMESTAMP=$(TZ=Asia/Shanghai date +'%Y%m%d%H%M%S')
+        echo "BUILD_TIMESTAMP=$BUILD_TIMESTAMP" >> $GITHUB_ENV
+        
+        # Parse the JSON output and format each entry as "repo(tagname)"
+        PACKAGE_INFO_STR=$(echo '${{ steps.getLatestTags.outputs.latest_tags }}' | jq -r 'to_entries | map(select(.key != "openwrt/openwrt")) | map("\(.key)(\(.value))") | join(", ")')
+        # Construct the final output string with prefix
+        PACKAGE_INFO="- Packages: $PACKAGE_INFO_STR"
+        # Set the formatted output as a GitHub environment variable
+        echo "PACKAGE_INFO=$PACKAGE_INFO" >> $GITHUB_ENV
+        
+        OUTPUT_DIR=output/${{ matrix.device }}-$BUILD_TIMESTAMP
+        mkdir -p $OUTPUT_DIR
+        
+        sudo chmod +x ./repo/img2qcow.sh
+        ./repo/img2qcow.sh ./openwrt/bin/targets $OUTPUT_DIR/
+        
+        find ${{ github.workspace }}/openwrt/bin/targets -type d -name "packages" -exec rm -rf {} \; -prune
+        # 复制固件文件
+        cp -r openwrt/bin/targets/*/* $OUTPUT_DIR/
+        
+        # 生成元数据
+        echo "Device: ${{ matrix.device }}" > $OUTPUT_DIR/build-info.txt
+        echo "Commit: $(git -C openwrt rev-parse HEAD)" >> $OUTPUT_DIR/build-info.txt
+        echo "Build Date: $BUILD_TIMESTAMP" >> $OUTPUT_DIR/build-info.txt
+        
+        # 创建压缩包
+        tar -czvf $OUTPUT_DIR.tar.gz $OUTPUT_DIR
+
+    # 步骤7：发布Release
+    - name: Upload release
+      uses: softprops/action-gh-release@v1
+      if: success()
+      with:
+        tag_name: openwrt-${{ matrix.device }}-${{ env.BUILD_TIMESTAMP }}
+        files: |
+          output/*.tar.gz
+        body: |
+          ### Build Details
+          - Target Device: ${{ matrix.device }}
+          - Build Date: ${{ env.BUILD_TIMESTAMP }}
+          - OpenWRT Version: ${{ fromJson(steps.getLatestTags.outputs.latest_tags)['openwrt/openwrt'] }}
+          ${{ inputs.isIncludePackages && env.PACKAGE_INFO || '' }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
