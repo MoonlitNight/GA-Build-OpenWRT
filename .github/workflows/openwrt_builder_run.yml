@@ -139,7 +139,7 @@ jobs:
         cd openwrt
         export CCACHE_DIR=${{ env.CCACHE_DIR }}
         export CCACHE_MAXSIZE=2G
-        make -j$(($(nproc) + 1)) CCACHE=1 BUILD_LOG=1 V=s defconfig download clean world
+        make -j$(($(nproc) + 1)) CCACHE=1 defconfig download clean world
 
     # 步骤6：打包成品
     - name: Package artifacts
